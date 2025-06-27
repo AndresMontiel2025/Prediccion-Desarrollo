@@ -12,11 +12,11 @@ st.title("Predicción del Desarrollo del Establecimiento Educativo")
 # o en subdirectorios relativos al script de Streamlit.
 # Es mejor NO usar rutas absolutas que dependen de Google Drive en Streamlit.
 # Deberás subir estos archivos (modelo, encoders, scaler, features, datos) a tu repositorio de GitHub.
-MODEL_PATH = 'gradient_boosting_model.pkl'
-FEATURES_PATH = 'gradient_boosting_features.pkl'
-ONEHOT_COMUNA_PATH = 'onehot_encoder_comuna.pkl'
-ONEHOT_PS_PATH = 'onehot_encoder_prestacion_servicio.pkl'
-SCALER_PATH = 'scaler_gestion_academica.pkl'
+MODEL_PATH = 'Modelos_Guardados/gradient_boosting_model.pkl'
+FEATURES_PATH = 'Modelos_Guardados/gradient_boosting_features.pkl'
+ONEHOT_COMUNA_PATH = 'Modelos_Guardados/onehot_encoder_comuna.pkl'
+ONEHOT_PS_PATH = 'Modelos_Guardados/onehot_encoder_prestacion_servicio.pkl'
+SCALER_PATH = 'Modelos_Guardados/scaler_gestion_academica.pkl'
 ORDINAL_DESARROLLO_PATH = 'ordinal_encoder_desarrollo.pkl'
 # Si el archivo de datos original es necesario para mostrar las entradas, también cárgalo.
 # Asegúrate de que este archivo 'Conjunto de datos nuevos.xlsx' también esté en tu repo.
