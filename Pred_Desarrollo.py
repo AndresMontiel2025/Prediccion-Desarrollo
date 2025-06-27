@@ -1,128 +1,165 @@
-# prompt: Haz todo el despliegue anterior en streamlit
+# prompt: Haz todo el despliegue anterior en streamlit. Se va a subir a github y se desplegará en streamlit
 
 import streamlit as st
 import pandas as pd
-import os
 import joblib
-import base64
+import os
 
-# Function to load the dataset
-@st.cache_data
-def load_data(path):
-    df = pd.read_excel(path)
-    return df
+# Título de la aplicación
+st.title("Predicción del Desarrollo del Establecimiento Educativo")
 
-# Function to load the encoders and scaler
-@st.cache_resource
-def load_resources(path):
-    os.chdir(path)
-    onehot_encoder_comuna = joblib.load('onehot_encoder_comuna.pkl')
-    onehot_encoder_prestacion_servicio = joblib.load('onehot_encoder_prestacion_servicio.pkl')
-    scaler = joblib.load('scaler_gestion_academica.pkl')
-    gradient_boosting_model = joblib.load('gradient_boosting_model.pkl')
-    feature_names = joblib.load('gradient_boosting_features.pkl')
-    ordinal_encoder_desarrollo = joblib.load('ordinal_encoder_desarrollo.pkl')
-    return (onehot_encoder_comuna, onehot_encoder_prestacion_servicio, scaler,
-            gradient_boosting_model, feature_names, ordinal_encoder_desarrollo)
+# Definir las rutas de los archivos. Asume que los archivos están en el mismo directorio
+# o en subdirectorios relativos al script de Streamlit.
+# Es mejor NO usar rutas absolutas que dependen de Google Drive en Streamlit.
+# Deberás subir estos archivos (modelo, encoders, scaler, features, datos) a tu repositorio de GitHub.
+MODEL_PATH = 'gradient_boosting_model.pkl'
+FEATURES_PATH = 'gradient_boosting_features.pkl'
+ONEHOT_COMUNA_PATH = 'onehot_encoder_comuna.pkl'
+ONEHOT_PS_PATH = 'onehot_encoder_prestacion_servicio.pkl'
+SCALER_PATH = 'scaler_gestion_academica.pkl'
+ORDINAL_DESARROLLO_PATH = 'ordinal_encoder_desarrollo.pkl'
+# Si el archivo de datos original es necesario para mostrar las entradas, también cárgalo.
+# Asegúrate de que este archivo 'Conjunto de datos nuevos.xlsx' también esté en tu repo.
+DATA_PATH = 'Conjunto de datos nuevos.xlsx'
 
-# Streamlit App Title
-st.title("Predicción del Desarrollo Educativo")
 
-# Path to your files in Google Drive
-# IMPORTANT: You will need to mount Google Drive or make these files
-# accessible to the environment where Streamlit is running.
-# For a deployed Streamlit app, you'd typically use cloud storage
-# or include the files in your application's directory.
-# For local testing with Colab, you might manually copy files.
-#DATASET_PATH = "/content/drive/MyDrive/Inteligencia Analítica/Trabajo Final/Dataset/Conjunto de datos nuevos.xlsx"
-#MODELS_PATH = "/content/drive/MyDrive/Inteligencia Analítica/Trabajo Final/Modelos_Guardados"
+# Cargar los modelos y objetos necesarios
+@st.cache_resource # Cachea la carga para no recargar en cada interacción
+def load_resources():
+    try:
+        gradient_boosting_model = joblib.load(MODEL_PATH)
+        feature_names = joblib.load(FEATURES_PATH)
+        onehot_encoder_comuna = joblib.load(ONEHOT_COMUNA_PATH)
+        onehot_encoder_prestacion_servicio = joblib.load(ONEHOT_PS_PATH)
+        scaler = joblib.load(SCALER_PATH)
+        ordinal_encoder_desarrollo = joblib.load(ORDINAL_DESARROLLO_PATH)
+        return (gradient_boosting_model, feature_names, onehot_encoder_comuna,
+                onehot_encoder_prestacion_servicio, scaler, ordinal_encoder_desarrollo)
+    except FileNotFoundError as e:
+        st.error(f"Error al cargar recursos: {e}. Asegúrate de que todos los archivos (.pkl, .xlsx) estén en las rutas correctas en tu repositorio.")
+        return None
 
-try:
-    # Load data
-    df = load_data(DATASET_PATH)
-    df_original_for_display = df.copy() # Keep a copy for displaying original columns
+resources = load_resources()
 
-    # Load models and resources
-    onehot_encoder_comuna, onehot_encoder_prestacion_servicio, scaler, \
-    gradient_boosting_model, feature_names, ordinal_encoder_desarrollo = load_resources(MODELS_PATH)
+if resources:
+    (gradient_boosting_model, feature_names, onehot_encoder_comuna,
+     onehot_encoder_prestacion_servicio, scaler, ordinal_encoder_desarrollo) = resources
 
-    st.write("Datos cargados y modelos/recursos listos.")
+    st.write("Recursos cargados exitosamente.")
 
-    # --- Data Preprocessing (as in the notebook) ---
-    df = df.drop(columns=['año', 'codigo_dane', 'establecimiento educativo'])
+    # Opción para subir un archivo Excel con nuevos datos (opcional)
+    uploaded_file = st.file_uploader("Sube un archivo Excel con los datos a predecir", type=["xlsx"])
 
-    # Ensure categorical columns are of type 'category'
-    df['prestacion_servicio'] = df['prestacion_servicio'].astype('category')
-    df['comuna_establecimiento'] = df['comuna_establecimiento'].astype('category')
+    if uploaded_file is not None:
+        try:
+            df = pd.read_excel(uploaded_file)
 
-    # Apply one-hot encoding
-    df_comuna_encoded = onehot_encoder_comuna.transform(df[['comuna_establecimiento']])
-    df_ps_encoded = onehot_encoder_prestacion_servicio.transform(df[['prestacion_servicio']])
+            st.subheader("Datos cargados (primeras 5 filas):")
+            st.dataframe(df.head())
 
-    # Convert to DataFrames
-    df_comuna_encoded_df = pd.DataFrame(df_comuna_encoded, columns=onehot_encoder_comuna.get_feature_names_out(['comuna_establecimiento']))
-    df_ps_encoded_df = pd.DataFrame(df_ps_encoded, columns=onehot_encoder_prestacion_servicio.get_feature_names_out(['prestacion_servicio']))
+            # --- Preprocesamiento de los datos subidos ---
+            # Asumiendo que la estructura de columnas del archivo subido es similar al original
+            # y que necesita el mismo preprocesamiento.
 
-    # Concatenate and drop original categorical columns
-    df = pd.concat([df.drop(columns=['comuna_establecimiento', 'prestacion_servicio']).reset_index(drop=True),
-                      df_comuna_encoded_df.reset_index(drop=True),
-                      df_ps_encoded_df.reset_index(drop=True)], axis=1)
+            # Eliminar columnas no necesarias (si existen)
+            cols_to_drop = ['año', 'codigo_dane', 'establecimiento educativo']
+            df = df.drop(columns=[col for col in cols_to_drop if col in df.columns])
 
-    # Scale 'gestion_academica'
-    df['gestion_academica_scaled'] = scaler.transform(df[['gestion_academica']]) # Use transform as scaler is already fitted
+            # Convertir a categóricas (si existen)
+            if 'prestacion_servicio' in df.columns:
+                df['prestacion_servicio'] = df['prestacion_servicio'].astype('category')
+            if 'comuna_establecimiento' in df.columns:
+                 df['comuna_establecimiento'] = df['comuna_establecimiento'].astype('category')
 
-    # --- Prediction ---
-    # Ensure the input DataFrame has the same columns and order as used during training
-    # Drop 'gestion_academica' as we will use the scaled version
-    if 'gestion_academica' in df.columns:
-        df_model_input = df.drop(columns=['gestion_academica'])
+
+            # Aplicar One-Hot Encoding (usando los encoders cargados)
+            # Asegúrate de manejar casos donde las columnas categóricas no estén presentes
+            df_encoded_list = []
+            df_remaining = df.copy()
+
+            if 'comuna_establecimiento' in df_remaining.columns:
+                # Manejar valores desconocidos: 'ignore' asigna ceros
+                df_comuna_encoded = onehot_encoder_comuna.transform(df_remaining[['comuna_establecimiento']])
+                df_comuna_encoded_df = pd.DataFrame(df_comuna_encoded, columns=onehot_encoder_comuna.get_feature_names_out(['comuna_establecimiento']), index=df_remaining.index)
+                df_encoded_list.append(df_comuna_encoded_df)
+                df_remaining = df_remaining.drop(columns=['comuna_establecimiento'])
+
+            if 'prestacion_servicio' in df_remaining.columns:
+                 # Manejar valores desconocidos: 'ignore' asigna ceros
+                df_ps_encoded = onehot_encoder_prestacion_servicio.transform(df_remaining[['prestacion_servicio']])
+                df_ps_encoded_df = pd.DataFrame(df_ps_encoded, columns=onehot_encoder_prestacion_servicio.get_feature_names_out(['prestacion_servicio']), index=df_remaining.index)
+                df_encoded_list.append(df_ps_encoded_df)
+                df_remaining = df_remaining.drop(columns=['prestacion_servicio'])
+
+
+            # Concatenar las columnas codificadas y las columnas restantes
+            df_processed = pd.concat([df_remaining] + df_encoded_list, axis=1)
+
+
+            # Aplicar Scaling a 'gestion_academica' (si existe)
+            if 'gestion_academica' in df_processed.columns:
+                 # Usar transform, no fit_transform, ya que el scaler ya fue entrenado
+                 df_processed['gestion_academica_scaled'] = scaler.transform(df_processed[['gestion_academica']])
+                 # Opcional: eliminar la columna original si solo se necesita la escalada
+                 # df_processed = df_processed.drop(columns=['gestion_academica'])
+
+
+            # Asegurarse de que el DataFrame procesado tenga exactamente las mismas columnas
+            # y en el mismo orden que las características esperadas por el modelo
+            # Esto es CRUCIAL para evitar errores de predicción.
+            # Rellenar con 0 si faltan columnas (pueden faltar columnas de one-hot encoding si
+            # en el archivo subido no están todas las categorías presentes en el entrenamiento)
+            # Asegurarse de que solo están las columnas esperadas y en el orden correcto
+            df_model_input = pd.DataFrame(index=df_processed.index)
+            for col in feature_names:
+                 if col in df_processed.columns:
+                     df_model_input[col] = df_processed[col]
+                 else:
+                     # Si una columna esperada por el modelo no está en los datos subidos,
+                     # probablemente es una categoría de one-hot encoding que no apareció.
+                     # Se rellena con 0, como lo haría transform(handle_unknown='ignore').
+                     df_model_input[col] = 0
+
+            # --- Realizar predicciones ---
+            if not df_model_input.empty:
+                 # Realizar predicciones (valores codificados)
+                 predictions_encoded = gradient_boosting_model.predict(df_model_input)
+
+                 # Decodificar las predicciones a sus valores originales
+                 predictions_original = ordinal_encoder_desarrollo.inverse_transform(predictions_encoded.reshape(-1, 1))
+
+                 # Agregar la columna de predicciones decodificadas al DataFrame original cargado
+                 # (para mostrar las entradas originales junto a la predicción)
+                 df['prediccion_desarrollo'] = predictions_original.flatten()
+
+                 st.subheader("Resultados de la Predicción:")
+                 # Mostrar el DataFrame original con la nueva columna de predicciones
+                 st.dataframe(df[['codigo_dane', 'establecimiento educativo', 'prestacion_servicio',
+                                  'comuna_establecimiento', 'gestion_academica', 'prediccion_desarrollo']])
+
+            else:
+                 st.warning("El DataFrame de entrada para el modelo está vacío después del preprocesamiento.")
+
+
+        except Exception as e:
+            st.error(f"Ocurrió un error durante el procesamiento del archivo: {e}")
+
     else:
-         df_model_input = df.copy()
+        st.info("Por favor, sube un archivo Excel para obtener predicciones.")
 
-    # Select only the features the model was trained on
-    df_model_input = df_model_input[feature_names].copy()
+    # Opcional: Mostrar las predicciones del archivo original usado en Colab (si lo cargas)
+    # Esto es útil para verificar que la carga y predicción funcionan igual que en Colab
+    # if st.checkbox("Mostrar predicciones del archivo de entrenamiento original"):
+    #     try:
+    #         df_original_train = pd.read_excel(DATA_PATH)
+    #         # Aquí replicarías el preprocesamiento y predicción para df_original_train
+    #         # similar a lo que hiciste en Colab y lo mostrarías.
+    #         # (Este código sería más extenso y no se incluye aquí para brevedad,
+    #         # pero seguiría la lógica de preprocesamiento y predicción definida arriba).
+    #         st.write("Implementar carga y predicción para el archivo de entrenamiento original.")
+    #     except FileNotFoundError:
+    #         st.warning(f"No se encontró el archivo de datos original en la ruta: {DATA_PATH}")
 
-    # Make predictions
-    predictions_encoded = gradient_boosting_model.predict(df_model_input)
+else:
+    st.error("La aplicación no pudo cargar los recursos necesarios. Consulta los logs para más detalles.")
 
-    # Decode predictions
-    predictions_original = ordinal_encoder_desarrollo.inverse_transform(predictions_encoded.reshape(-1, 1))
-
-    # Add predictions to the original DataFrame (without encoding)
-    df_original_for_display['prediccion_desarrollo'] = predictions_original.flatten()
-
-    # --- Display Results ---
-    st.subheader("Resultados de la Predicción")
-
-    # Display the relevant columns from the original DataFrame + prediction
-    display_cols = [col for col in df_original_for_display.columns if col not in ['año', 'codigo_dane', 'establecimiento educativo']]
-    display_cols.append('prediccion_desarrollo')
-
-    st.dataframe(df_original_for_display[display_cols])
-
-    # Option to download the results
-    csv_export = df_original_for_display[display_cols].to_csv(index=False).encode('utf-8')
-    st.download_button(
-        label="Descargar resultados como CSV",
-        data=csv_export,
-        file_name='predicciones_desarrollo.csv',
-        mime='text/csv',
-    )
-
-
-except FileNotFoundError:
-    st.error("Error: Asegúrate de que los archivos (dataset y modelos) existen en las rutas especificadas en Google Drive.")
-    st.info("Para ejecutar esto localmente, necesitarás copiar los archivos del dataset y modelos a un directorio accesible por tu aplicación Streamlit.")
-except Exception as e:
-    st.error(f"Ocurrió un error: {e}")
-    st.error("Por favor, verifica que los archivos de modelos y encoders son correctos y coinciden con el entrenamiento.")
-
-# Instructions on how to run
-st.sidebar.subheader("Cómo ejecutar este código")
-st.sidebar.write("""
-1.  **Guarda** el código anterior como un archivo Python (ej: `app.py`).
-2.  **Asegúrate** de tener `streamlit`, `pandas`, `joblib`, `openpyxl`, `scikit-learn` instalados (`pip install streamlit pandas joblib openpyxl scikit-learn`).
-3.  **Coloca** el archivo de dataset (`Conjunto de datos nuevos.xlsx`) y la carpeta `Modelos_Guardados` (con todos los `.pkl` dentro) en rutas accesibles por donde ejecutas Streamlit. Si usas Google Colab para desarrollar y luego quieres desplegar, deberás descargar estos archivos de Drive. Para un despliegue web real, súbelos a un bucket S3, Google Cloud Storage, o inclúyelos en tu repositorio si no son demasiado grandes.
-4.  **Actualiza** las variables `DATASET_PATH` y `MODELS_PATH` en el código para que apunten a las ubicaciones correctas de tus archivos.
-5.  **Ejecuta** la aplicación desde tu terminal: `streamlit run app.py`
-""")
